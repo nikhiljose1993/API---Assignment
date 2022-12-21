@@ -57,21 +57,7 @@ app.get("/getdetails/:hospitalId", async (req, res) => {
 app.get("/get", async (req, res) => {
   try {
     const connection = await setConnection();
-    const [result] = await connection.query("select i from patients");
-    res.send(result);
-  } catch (err) {
-    console.log(err);
-    res.send(err);
-  }
-});
-
-app.get("/get/:id", async (req, res) => {
-  const id = req.params.id;
-  try {
-    const connection = await setConnection();
-    const [result] = await connection.query(
-      `select  from patients where id=${id}`
-    );
+    const [result] = await connection.query("select * from patients");
     res.send(result);
   } catch (err) {
     console.log(err);
