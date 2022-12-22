@@ -1,15 +1,25 @@
 const express = require("express");
 const mysql = require("mysql2/promise");
-const bodyParser = require("body-parser");
+const multer = require("multer");
+const uuid = require("uuid").v4;
 const crypto = require("crypto");
+const dotenv = require("dotenv").config({ path: __dirname + "/.env" });
 
 const app = express();
 const port = 3000;
-app.use(bodyParser.urlencoded({ extended: true }));
+
+const storage = multer.diskStorage({
+  destination: "public/upload-images/",
+  filename: function (req, file, cb) {
+    const ext = file.originalname.split(".")[1];
+    cb(null, `${uuid()}.${ext}`);
+  },
+});
+const upload = multer({ storage: storage });
 
 const emailRegex = /^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$/;
 const phoneRegex = /^\+?[0-9]{1,2}[0-9]{10}/;
-const salt = "dhedr2tr43@5";
+const salt = process.env.SALT;
 
 const setConnection = async () => {
   return await mysql.createConnection({
@@ -51,10 +61,12 @@ const validatePassword = (password, validationErrors) => {
   }
 };
 
-app.post("/register-patients", async (req, res) => {
+app.post("/register-patients", upload.single("avatar"), async (req, res) => {
   const psychiatristId = req.query.id;
   const validationErrors = [];
   const { name, address, email, phoneNumber, password } = req.body;
+  const patientPhoto = req.file;
+
   if (!name) {
     validationErrors.push({ nameError: "Need a name" });
   }
@@ -72,9 +84,13 @@ app.post("/register-patients", async (req, res) => {
     });
   }
   validatePassword(password, validationErrors);
+  if (!patientPhoto) {
+    validationErrors.push({
+      patientPhotoError: "Need patient photo",
+    });
+  }
 
   if (validationErrors.length) {
-    console.log(validationErrors);
     res.status(422);
     res.send(validationErrors);
     return;
@@ -86,7 +102,7 @@ app.post("/register-patients", async (req, res) => {
 
   try {
     const connection = await setConnection();
-    await connection.query(
+    const id = await connection.query(
       `INSERT INTO patients
       (
         name,
@@ -94,7 +110,8 @@ app.post("/register-patients", async (req, res) => {
         email,
         phone,
         password,
-        psychiatrists_id
+        psychiatrists_id,
+        patientphoto
       )
       VALUES
       (
@@ -103,7 +120,8 @@ app.post("/register-patients", async (req, res) => {
         '${email}',
         '${phoneNumber || null}',
         '${hash}',
-        ${psychiatristId}
+        ${psychiatristId},
+        '${patientPhoto.filename}'
       );`
     );
     res.send("Successfully registered patient");
@@ -114,8 +132,8 @@ app.post("/register-patients", async (req, res) => {
   }
 });
 
-app.get("/get-details/:hospitalId", async (req, res) => {
-  const hospitalId = req.params.hospitalId;
+app.get("/get-details/", async (req, res) => {
+  const hospitalId = req.query.hospitalId;
   try {
     const connection = await setConnection();
     const [result] = await connection.query(
